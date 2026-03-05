@@ -211,7 +211,56 @@ def generate_recipe_report(recipe_id: str, original: dict, models: list[str]) ->
 </body></html>"""
 
 
-def generate_index(recipes: dict[str, dict]) -> str:
+def summarize_models(models: list[str]) -> list[dict]:
+    summaries = []
+    for model_slug in models:
+        eval_dir = EVAL_DIR / model_slug
+        if not eval_dir.exists():
+            continue
+        scores = []
+        for p in eval_dir.glob("*.json"):
+            with open(p) as f:
+                e = json.load(f)
+            parsed = e.get("parsed")
+            if parsed:
+                scores.append(parsed)
+        if not scores:
+            continue
+        compl = [s["completeness"] for s in scores if s.get("completeness") is not None]
+        accur = [s["accuracy"] for s in scores if s.get("accuracy") is not None]
+        summaries.append({
+            "model": model_slug,
+            "count": len(scores),
+            "avg_completeness": sum(compl) / len(compl) if compl else None,
+            "avg_accuracy": sum(accur) / len(accur) if accur else None,
+        })
+    return sorted(summaries, key=lambda s: s.get("avg_accuracy") or 0, reverse=True)
+
+
+def render_model_summary(summaries: list[dict]) -> str:
+    if not summaries:
+        return ""
+    rows = []
+    for s in summaries:
+        compl = f"{s['avg_completeness']:.2f}" if s["avg_completeness"] is not None else "n/a"
+        accur = f"{s['avg_accuracy']:.2f}" if s["avg_accuracy"] is not None else "n/a"
+        rows.append(f"""<tr>
+            <td><strong>{escape(s['model'])}</strong></td>
+            <td>{s['count']}</td>
+            <td>{score_bar(s['avg_completeness'])}</td>
+            <td>{score_bar(s['avg_accuracy'])}</td>
+        </tr>""")
+    return f"""<div class="model-section">
+        <h2>Model Scores</h2>
+        <table class="ingredients">
+            <tr><th>Model</th><th>Evaluated</th><th>Avg Completeness</th><th>Avg Accuracy</th></tr>
+            {''.join(rows)}
+        </table>
+    </div>"""
+
+
+def generate_index(recipes: dict[str, dict], models: list[str]) -> str:
+    summaries = summarize_models(models)
     links = []
     for rid, r in sorted(recipes.items()):
         title = escape(r.get("title", rid))
@@ -223,6 +272,8 @@ def generate_index(recipes: dict[str, dict]) -> str:
 <style>{CSS}</style>
 </head><body>
 <h1>Recipe Pipeline Reports</h1>
+{render_model_summary(summaries)}
+<h2>Recipes</h2>
 <ul>{''.join(links)}</ul>
 </body></html>"""
 
@@ -255,7 +306,7 @@ def generate_all(jsonl_path: Path) -> None:
         generated[rid] = original
         print(f"  {rid}.html")
 
-    index_html = generate_index(generated)
+    index_html = generate_index(generated, models)
     (REPORT_DIR / "index.html").write_text(index_html, encoding="utf-8")
     print(f"\nGenerated {len(generated)} reports in {REPORT_DIR}/")
     url = str(REPORT_DIR.resolve()).replace("/home/joshua/Dropbox/work", "http://bigger/work")
