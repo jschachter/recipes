@@ -115,10 +115,15 @@ recipes/
   .gitignore
 ```
 
+## Datasets
+
+- [RecipeNLG](https://www.kaggle.com/datasets/paultimothymooney/recipenlg) -- ~2.2M recipes, CSV with title/ingredients/directions. NLP-focused.
+- [Better Recipes for a Better Life](https://www.kaggle.com/datasets/thedevastator/better-recipes-for-a-better-life) -- curated recipe dataset.
+- [Food.com Recipes and User Interactions](https://www.kaggle.com/datasets/shuyangli94/food-com-recipes-and-user-interactions) -- recipes plus user ratings/reviews.
+- [Epicurious Recipes](https://www.kaggle.com/datasets/hugodarwood/epirecipes) -- recipes from Epicurious with nutritional data.
+
 ## Open Questions
 
-- Which specific datasets to start with (Kaggle, RecipeNLG, Recipe1M?)
 - LLM framework choice (instructor, litellm, or raw HTTP)
 - Prompt design for each schema layer
 - Evaluation rubric details for Opus scoring
-- Whether to version prompts with git tags or separate files
