@@ -2,6 +2,7 @@
 
 ## Analysis / Downstream Uses
 
+- Recipe deduplication via TF-IDF cosine similarity (RecipeNLG used threshold=0.92)
 - Recipe deduplication via clustering (same dish, different wording)
 - Recipe embeddings -- vector space of recipes, find neighbors, interpolate
 - Recipe-specific LLM fine-tuning -- small model trained on structured recipe corpus
@@ -12,6 +13,11 @@
 - Ingredient substitution networks -- which ingredients are interchangeable
 - Cooking technique taxonomy derived from data
 - Recipe complexity scoring
+- Unit normalization (imperial vs metric, "a pinch" etc) -- identified hard problem
+- Compare LLM extraction against RecipeNLG's SpaCy NER model as baseline
+- Control token / special token encoding of recipe structure (RecipeNLG approach)
+- Filter RecipeNLG on source=Gathered for higher quality ~1.6M subset
+- "Checklist models" for recipe generation (Kiddon et al., 2016)
 
 ## Infrastructure
 
