@@ -61,7 +61,7 @@ def call_model(
         "temperature": 0,
     }
     start = time.monotonic()
-    resp = httpx.post(OPENROUTER_URL, json=payload, headers=headers, timeout=120)
+    resp = httpx.post(OPENROUTER_URL, json=payload, headers=headers, timeout=60)
     elapsed = time.monotonic() - start
     resp.raise_for_status()
     data = resp.json()
@@ -93,11 +93,11 @@ def transform_one(
     user_message = format_user_message(recipe)
     response = call_model(model, system_prompt, user_message, api_key)
 
-    content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+    content = response.get("choices", [{}])[0].get("message", {}).get("content") or ""
     usage = response.get("usage", {})
     elapsed = response.get("_elapsed_seconds", 0)
 
-    parsed = extract_json(content)
+    parsed = extract_json(content) if content else None
     validation_ok = False
     validation_errors = None
     if parsed is not None:

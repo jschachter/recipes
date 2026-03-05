@@ -22,9 +22,13 @@
 ## Infrastructure
 
 - Ultrafast providers (Cerebras, Groq) for million-scale runs
-- Local inference with Ollama for small models (4060 Ti 16GB available)
+- Local inference with Ollama for small models
+  - `bigger`: 4060 Ti 16GB -- good for 7-8B models
+  - Second box: 5090 + 128GB RAM -- can run 70B+ models locally
+- Parallelize transform across models (asyncio or multiprocessing)
 - Recipe deduplication before transform to avoid wasting API calls
 - Cost estimation before big runs
+- Cross-check evaluations: multiple eval models scoring same outputs to detect eval bias
 
 ## Evaluation
 
