@@ -8,7 +8,10 @@ from pathlib import Path
 
 import httpx
 
+from src.env import load_dotenv
 from src.schema import Recipe
+
+load_dotenv()
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 PROMPTS_DIR = Path("prompts")

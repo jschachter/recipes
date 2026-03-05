@@ -7,6 +7,10 @@ from pathlib import Path
 
 import httpx
 
+from src.env import load_dotenv
+
+load_dotenv()
+
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OUTPUT_DIR = Path("data_nosync/outputs")
 EVAL_DIR = Path("data_nosync/evaluations")
