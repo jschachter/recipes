@@ -214,18 +214,32 @@ def generate_recipe_report(recipe_id: str, original: dict, models: list[str]) ->
 def summarize_models(models: list[str]) -> list[dict]:
     summaries = []
     for model_slug in models:
+        # Load timing/cost from outputs
+        model_dir = OUTPUT_DIR / model_slug
+        elapsed_times = []
+        total_cost = 0.0
+        if model_dir.exists():
+            for p in model_dir.glob("*.json"):
+                with open(p) as f:
+                    out = json.load(f)
+                if out.get("elapsed_seconds"):
+                    elapsed_times.append(out["elapsed_seconds"])
+                total_cost += out.get("usage", {}).get("cost", 0) or 0
+
+        # Load eval scores
         eval_dir = EVAL_DIR / model_slug
-        if not eval_dir.exists():
-            continue
         scores = []
-        for p in eval_dir.glob("*.json"):
-            with open(p) as f:
-                e = json.load(f)
-            parsed = e.get("parsed")
-            if parsed:
-                scores.append(parsed)
-        if not scores:
+        if eval_dir.exists():
+            for p in eval_dir.glob("*.json"):
+                with open(p) as f:
+                    e = json.load(f)
+                parsed = e.get("parsed")
+                if parsed:
+                    scores.append(parsed)
+
+        if not elapsed_times and not scores:
             continue
+
         compl = [s["completeness"] for s in scores if s.get("completeness") is not None]
         accur = [s["accuracy"] for s in scores if s.get("accuracy") is not None]
         summaries.append({
@@ -233,6 +247,8 @@ def summarize_models(models: list[str]) -> list[dict]:
             "count": len(scores),
             "avg_completeness": sum(compl) / len(compl) if compl else None,
             "avg_accuracy": sum(accur) / len(accur) if accur else None,
+            "avg_elapsed": sum(elapsed_times) / len(elapsed_times) if elapsed_times else None,
+            "total_cost": total_cost,
         })
     return sorted(summaries, key=lambda s: s.get("avg_accuracy") or 0, reverse=True)
 
@@ -242,18 +258,20 @@ def render_model_summary(summaries: list[dict]) -> str:
         return ""
     rows = []
     for s in summaries:
-        compl = f"{s['avg_completeness']:.2f}" if s["avg_completeness"] is not None else "n/a"
-        accur = f"{s['avg_accuracy']:.2f}" if s["avg_accuracy"] is not None else "n/a"
+        elapsed = f"{s['avg_elapsed']:.1f}s" if s.get("avg_elapsed") is not None else "n/a"
+        cost = f"${s['total_cost']:.4f}" if s.get("total_cost") else "n/a"
         rows.append(f"""<tr>
             <td><strong>{escape(s['model'])}</strong></td>
             <td>{s['count']}</td>
             <td>{score_bar(s['avg_completeness'])}</td>
             <td>{score_bar(s['avg_accuracy'])}</td>
+            <td>{elapsed}</td>
+            <td>{cost}</td>
         </tr>""")
     return f"""<div class="model-section">
         <h2>Model Scores</h2>
         <table class="ingredients">
-            <tr><th>Model</th><th>Evaluated</th><th>Avg Completeness</th><th>Avg Accuracy</th></tr>
+            <tr><th>Model</th><th>Evaluated</th><th>Avg Completeness</th><th>Avg Accuracy</th><th>Avg Time</th><th>Total Cost</th></tr>
             {''.join(rows)}
         </table>
     </div>"""

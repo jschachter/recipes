@@ -15,7 +15,7 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OUTPUT_DIR = Path("data_nosync/outputs")
 EVAL_DIR = Path("data_nosync/evaluations")
 
-EVAL_MODEL = "anthropic/claude-sonnet-4"
+EVAL_MODEL = "anthropic/claude-opus-4"
 
 EVAL_PROMPT = """\
 You are evaluating the quality of a structured recipe extraction. You will receive:
