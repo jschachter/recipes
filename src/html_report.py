@@ -258,7 +258,8 @@ def generate_all(jsonl_path: Path) -> None:
     index_html = generate_index(generated)
     (REPORT_DIR / "index.html").write_text(index_html, encoding="utf-8")
     print(f"\nGenerated {len(generated)} reports in {REPORT_DIR}/")
-    print(f"Open: file://{REPORT_DIR.resolve()}/index.html")
+    url = str(REPORT_DIR.resolve()).replace("/home/joshua/Dropbox/work", "http://bigger/work")
+    print(f"Open: {url}/index.html")
 
 
 if __name__ == "__main__":
