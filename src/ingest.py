@@ -9,6 +9,17 @@ RAW_DIR = Path("data_nosync/raw")
 OUTPUT_DIR = Path("data_nosync/ingested")
 
 
+def _parse_json_list(s: str) -> str:
+    """Parse a JSON array string into newline-separated text."""
+    try:
+        items = json.loads(s)
+        if isinstance(items, list):
+            return "\n".join(str(item) for item in items)
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return s
+
+
 def load_recipenlg(path: Path) -> list[dict]:
     """Load RecipeNLG CSV. Expected columns: title, ingredients, directions, link, source."""
     recipes = []
@@ -18,8 +29,8 @@ def load_recipenlg(path: Path) -> list[dict]:
             recipes.append({
                 "id": f"recipenlg_{i}",
                 "title": row.get("title", "").strip(),
-                "ingredients_raw": row.get("ingredients", ""),
-                "directions_raw": row.get("directions", ""),
+                "ingredients_raw": _parse_json_list(row.get("ingredients", "")),
+                "directions_raw": _parse_json_list(row.get("directions", "")),
                 "source": row.get("source", ""),
                 "url": row.get("link", ""),
                 "dataset": "recipenlg",
