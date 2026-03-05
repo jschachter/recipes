@@ -1,0 +1,15 @@
+[project]
+name = "recipes"
+version = "0.1.0"
+description = "LLM-powered recipe structuring pipeline"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "httpx",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "pytest",
+]
