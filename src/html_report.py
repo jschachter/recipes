@@ -77,8 +77,8 @@ def render_steps(steps: list[dict]) -> str:
         action = escape(str(step.get("action", "") or ""))
         desc = escape(str(step.get("description", "") or ""))
         raw = escape(str(step.get("raw_text", "") or ""))
-        ingredients = ", ".join(step.get("ingredients", []) or [])
-        tools = ", ".join(step.get("tools", []) or [])
+        ingredients = ", ".join(str(x) for x in (step.get("ingredients", []) or []) if x)
+        tools = ", ".join(str(x) for x in (step.get("tools", []) or []) if x)
         duration = escape(str(step.get("duration", "") or ""))
         temp = escape(str(step.get("temperature", "") or ""))
 
