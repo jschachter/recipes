@@ -53,3 +53,9 @@ Draft tweets for a thread. 280 char limit per tweet.
 - Ran 120K recipes through triplet detection across cuisines. The data independently rediscovered: mirepoix (carrot+celery+onion), the Indian curry base (coriander+cumin+turmeric), the Thai trinity (fish sauce+lime juice+shallot), and spanakopita (feta+phyllo+spinach). Nobody told it these existed.
 
 - The Japanese cooking trinity according to 120K recipes: mirin + scallion + soy sauce. The Thai: coconut milk + fish sauce + lime juice. The Korean: green onion + sesame oil + sesame seed. Each cuisine's structural DNA, discovered from co-occurrence alone.
+
+- Zoomed eigenvectors into Indian food. EV2 immediately split North vs South Indian: samosa dough on one end, coconut milk + curry leaves + fish sauce on the other. The most important axis of variation within Indian cooking, found without being told it exists.
+
+- Every cuisine has a "dessert axis" — it's universal. But the axes after that are unique. Chinese food's EV2 is dumpling-making vs wok cooking. French EV2 is Provençal vs pâtisserie. Mexican EV2 is mole vs Tex-Mex. The first split is shared; after that, each cuisine has its own geometry.
+
+- French eigenvector 5 literally rediscovered cassoulet: white beans + confit duck legs + garlic-pork sausage. One dish, so structurally distinctive it gets its own dimension.
