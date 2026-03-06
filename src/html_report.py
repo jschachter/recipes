@@ -240,17 +240,40 @@ def summarize_models(models: list[str]) -> list[dict]:
         if not elapsed_times and not scores:
             continue
 
+        # Validation rate
+        total_outputs = len(list(model_dir.glob("*.json"))) if model_dir.exists() else 0
+        valid_outputs = 0
+        if model_dir.exists():
+            for p in model_dir.glob("*.json"):
+                with open(p) as f:
+                    o = json.load(f)
+                if o.get("validation_ok"):
+                    valid_outputs += 1
+
         compl = [s["completeness"] for s in scores if s.get("completeness") is not None]
         accur = [s["accuracy"] for s in scores if s.get("accuracy") is not None]
+
+        avg_compl = sum(compl) / len(compl) if compl else None
+        avg_accur = sum(accur) / len(accur) if accur else None
+        avg_elapsed = sum(elapsed_times) / len(elapsed_times) if elapsed_times else None
+        valid_rate = valid_outputs / total_outputs if total_outputs else 0
+
+        # Combined score: 70% quality + 15% reliability + 15% speed
+        quality = ((avg_compl or 0) + (avg_accur or 0)) / 2
+        speed = max(0, 1 - (avg_elapsed or 999) / 60)
+        combined = quality * 0.70 + valid_rate * 0.15 + speed * 0.15
+
         summaries.append({
             "model": model_slug,
             "count": len(scores),
-            "avg_completeness": sum(compl) / len(compl) if compl else None,
-            "avg_accuracy": sum(accur) / len(accur) if accur else None,
-            "avg_elapsed": sum(elapsed_times) / len(elapsed_times) if elapsed_times else None,
+            "avg_completeness": avg_compl,
+            "avg_accuracy": avg_accur,
+            "avg_elapsed": avg_elapsed,
             "total_cost": total_cost,
+            "valid_rate": valid_rate,
+            "combined": combined,
         })
-    return sorted(summaries, key=lambda s: s.get("avg_accuracy") or 0, reverse=True)
+    return sorted(summaries, key=lambda s: s.get("combined") or 0, reverse=True)
 
 
 def render_model_summary(summaries: list[dict]) -> str:
@@ -260,18 +283,21 @@ def render_model_summary(summaries: list[dict]) -> str:
     for s in summaries:
         elapsed = f"{s['avg_elapsed']:.1f}s" if s.get("avg_elapsed") is not None else "n/a"
         cost = f"${s['total_cost']:.4f}" if s.get("total_cost") else "n/a"
+        valid = f"{s['valid_rate']:.0%}" if s.get("valid_rate") is not None else "n/a"
         rows.append(f"""<tr>
             <td><strong>{escape(s['model'])}</strong></td>
-            <td>{s['count']}</td>
+            <td>{score_bar(s.get('combined'))}</td>
             <td>{score_bar(s['avg_completeness'])}</td>
             <td>{score_bar(s['avg_accuracy'])}</td>
+            <td>{valid}</td>
             <td>{elapsed}</td>
             <td>{cost}</td>
         </tr>""")
     return f"""<div class="model-section">
         <h2>Model Scores</h2>
+        <p style="color:#666;font-size:0.9em">Combined = 70% quality (completeness + accuracy) + 15% reliability + 15% speed</p>
         <table class="ingredients">
-            <tr><th>Model</th><th>Evaluated</th><th>Avg Completeness</th><th>Avg Accuracy</th><th>Avg Time</th><th>Total Cost</th></tr>
+            <tr><th>Model</th><th>Combined</th><th>Completeness</th><th>Accuracy</th><th>Valid</th><th>Avg Time</th><th>Total Cost</th></tr>
             {''.join(rows)}
         </table>
     </div>"""
