@@ -9,8 +9,16 @@
 - Recipe as grammar -- formal language analysis of cooking operations
 - Graph neural networks on operation graphs (Layer 3)
 - Extract "deep rules" of cooking -- what always follows what, universal patterns
+  - Key insight: ingredients, techniques, tools are all "features" of a step -- they live in the same space. "Remove rosemary, add braising" is the same kind of operation as "remove rosemary, add thyme."
+  - The STEPS are the unit of analysis, not the ingredient list. Steps have structure (action, ingredients, tools, temp, duration); the ingredient list is just a bill of materials.
+  - Four discovery axes:
+    - **Sequential rules** -- "browning always precedes braising," "never add dairy before acid." The grammar of cooking.
+    - **Role equivalence** -- "in this structural position (herb + sauté + protein), these 5 ingredients are interchangeable." Contextual substitution.
+    - **Technique clusters** -- "there are really only ~30 fundamental cooking patterns and every recipe is a composition of them."
+    - **Anomaly detection** -- "this recipe does something almost no other recipe does." Finding innovations and outliers.
+  - Substitutability is contextual: ingredient X replaces Y only given the other ingredients, the dish class, and the cooking method. All are just features in a high-dimensional co-occurrence space.
 - Cuisine classification from structure alone (no ingredient names)
-- Ingredient substitution networks -- which ingredients are interchangeable
+- Ingredient substitution networks -- which ingredients are interchangeable (subsumed by deep rules above)
 - Cooking technique taxonomy derived from data
 - Recipe complexity scoring
 - Recipe classification -- category (dessert, side, main, etc.), cuisine, difficulty
@@ -20,6 +28,19 @@
 - Control token / special token encoding of recipe structure (RecipeNLG approach)
 - Filter RecipeNLG on source=Gathered for higher quality ~1.6M subset
 - "Checklist models" for recipe generation (Kiddon et al., 2016)
+
+## Spectral Analysis of Cooking (active)
+
+Core idea: build a co-occurrence graph where every feature in a step (action, ingredient, tool, temperature) is a node, and edges connect features that appear in the same step, weighted by frequency. Then compute eigenvectors of the adjacency matrix.
+
+- First eigenvector = centrality (PageRank-like). What's structurally central to cooking?
+- Subsequent eigenvectors = latent axes. In 25-recipe proof of concept, eigenvector 2 was savory↔sweet, eigenvector 3 was stew↔baking, eigenvector 5 was baking-spices↔savory-aromatics.
+- Key insight: ingredients, actions, tools, and temperatures all live in the same feature space. "Remove rosemary, add braising" is the same kind of operation as "remove rosemary, add thyme."
+- Substitutability = features that occupy similar positions in the eigenvector space (close in multiple dimensions).
+- Normalization question: loose for now (lowercase, strip quantities). Tight canonicalization later if needed.
+- Next step: run 10K recipes through Flash Lite + v5-strict, build graph, see what eigenvectors reveal at scale.
+
+Analogy: like blog connectivity graphs where eigenvectors revealed tech↔media axes and team-identity axes (Yankees-ness vs Red Sox-ness). In cooking, the equivalent might be cuisines, technique families, or unnamed structural concepts.
 
 ## Infrastructure
 
