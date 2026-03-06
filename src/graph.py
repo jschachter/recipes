@@ -10,6 +10,7 @@ from scipy import sparse
 from scipy.sparse.linalg import eigsh
 
 OUTPUT_DIR = Path("data_nosync/outputs")
+INGREDIENT_NORM_PATH = Path("data_nosync/ingredient_normalization.json")
 
 SYNONYMS = {
     "all-purpose flour": "flour", "ap flour": "flour",
@@ -19,11 +20,29 @@ SYNONYMS = {
     "green onions": "green onion", "margarine": "butter", "oleo": "butter",
 }
 
+# LLM-generated ingredient normalization lookup (loaded lazily)
+_ingredient_norm_cache: dict[str, str] | None = None
+
+
+def _get_ingredient_norms() -> dict[str, str]:
+    global _ingredient_norm_cache
+    if _ingredient_norm_cache is None:
+        if INGREDIENT_NORM_PATH.exists():
+            _ingredient_norm_cache = json.loads(INGREDIENT_NORM_PATH.read_text())
+        else:
+            _ingredient_norm_cache = {}
+    return _ingredient_norm_cache
+
 
 def normalize(name) -> str:
     if not isinstance(name, str):
         name = str(name)
     name = name.lower().strip()
+    # Try LLM normalization first
+    norms = _get_ingredient_norms()
+    if name in norms:
+        return norms[name]
+    # Fall back to manual synonyms
     if name.endswith("s") and not name.endswith("ss") and len(name) > 3:
         singular = name[:-1]
         if singular in SYNONYMS:
