@@ -1,13 +1,16 @@
 """Spot-check structured recipe outputs using a high-end model."""
 
+import asyncio
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import httpx
 
 from src.env import load_dotenv
+from src.transform import extract_json
 
 load_dotenv()
 
@@ -16,6 +19,7 @@ OUTPUT_DIR = Path("data_nosync/outputs")
 EVAL_DIR = Path("data_nosync/evaluations")
 
 EVAL_MODEL = "anthropic/claude-opus-4"
+DEFAULT_CONCURRENCY = 5
 
 EVAL_PROMPT = """\
 You are evaluating the quality of a structured recipe extraction. You will receive:
@@ -80,12 +84,8 @@ def format_eval_message(original: dict, structured: dict) -> str:
     return "\n\n".join(parts)
 
 
-def call_eval_model(user_message: str, api_key: str) -> dict:
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
+def _build_eval_payload(user_message: str) -> dict:
+    return {
         "model": EVAL_MODEL,
         "messages": [
             {"role": "system", "content": EVAL_PROMPT},
@@ -93,28 +93,83 @@ def call_eval_model(user_message: str, api_key: str) -> dict:
         ],
         "temperature": 0,
     }
-    resp = httpx.post(OPENROUTER_URL, json=payload, headers=headers, timeout=120)
-    resp.raise_for_status()
-    return resp.json()
 
 
-def extract_json(text: str) -> dict | None:
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        lines = [l for l in lines if not l.strip().startswith("```")]
-        text = "\n".join(lines)
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return None
+def _save_eval(eval_path: Path, recipe_id: str, model_slug: str, content: str, parsed: dict | None, usage: dict) -> None:
+    evaluation = {
+        "recipe_id": recipe_id,
+        "model": model_slug,
+        "eval_model": EVAL_MODEL,
+        "raw_response": content,
+        "parsed": parsed,
+        "usage": usage,
+    }
+    with open(eval_path, "w", encoding="utf-8") as f:
+        json.dump(evaluation, f, indent=2)
 
 
-def evaluate_model(
+# --- Async API ---
+
+async def _eval_one(
+    client: httpx.AsyncClient,
+    semaphore: asyncio.Semaphore,
+    recipe_id: str,
+    model_slug: str,
+    out_path: Path,
+    eval_path: Path,
+    ingested: dict[str, dict],
+    api_key: str,
+    counter: dict,
+    total: int,
+) -> None:
+    async with semaphore:
+        counter["started"] += 1
+        idx = counter["started"]
+
+        with open(out_path, encoding="utf-8") as f:
+            result = json.load(f)
+
+        if not result.get("parsed"):
+            print(f"  [{idx}/{total}] {recipe_id} (no parsed output, skipping)")
+            return
+
+        original = ingested.get(recipe_id)
+        if original is None:
+            print(f"  [{idx}/{total}] {recipe_id} (original not found, skipping)")
+            return
+
+        try:
+            user_message = format_eval_message(original, result["parsed"])
+            payload = _build_eval_payload(user_message)
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            start = time.monotonic()
+            resp = await client.post(OPENROUTER_URL, json=payload, headers=headers, timeout=120)
+            elapsed = round(time.monotonic() - start, 1)
+            resp.raise_for_status()
+            response = resp.json()
+
+            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            parsed = extract_json(content)
+
+            _save_eval(eval_path, recipe_id, model_slug, content, parsed, response.get("usage", {}))
+
+            if parsed:
+                print(f"  [{idx}/{total}] {recipe_id} completeness={parsed.get('completeness')} accuracy={parsed.get('accuracy')} ({elapsed}s)")
+            else:
+                print(f"  [{idx}/{total}] {recipe_id} eval_parse_fail ({elapsed}s)")
+        except Exception as e:
+            print(f"  [{idx}/{total}] {recipe_id} error: {e}")
+
+
+async def evaluate_model_async(
     model_slug: str,
     ingested: dict[str, dict],
     api_key: str,
     limit: int | None = None,
+    concurrency: int = DEFAULT_CONCURRENCY,
 ) -> None:
     model_dir = OUTPUT_DIR / model_slug
     if not model_dir.exists():
@@ -128,61 +183,54 @@ def evaluate_model(
     if limit is not None:
         output_files = output_files[:limit]
 
-    print(f"\n=== Evaluating {model_slug} ({len(output_files)} recipes) ===")
-    for i, out_path in enumerate(output_files):
+    # Filter to uncached
+    tasks = []
+    cached = 0
+    for out_path in output_files:
         recipe_id = out_path.stem
         eval_path = eval_dir / f"{recipe_id}.json"
-
         if eval_path.exists():
-            print(f"  [{i+1}/{len(output_files)}] {recipe_id} (cached)")
+            cached += 1
             continue
+        tasks.append((recipe_id, out_path, eval_path))
 
-        with open(out_path, encoding="utf-8") as f:
-            result = json.load(f)
+    total = len(tasks)
+    print(f"\n=== Evaluating {model_slug} | {total} to process, {cached} cached, concurrency={concurrency} ===")
+    if not tasks:
+        return
 
-        if not result.get("parsed"):
-            print(f"  [{i+1}/{len(output_files)}] {recipe_id} (no parsed output, skipping)")
-            continue
+    semaphore = asyncio.Semaphore(concurrency)
+    counter = {"started": 0}
 
-        original = ingested.get(recipe_id)
-        if original is None:
-            print(f"  [{i+1}/{len(output_files)}] {recipe_id} (original not found, skipping)")
-            continue
+    async with httpx.AsyncClient() as client:
+        coros = [
+            _eval_one(client, semaphore, recipe_id, model_slug, out_path, eval_path, ingested, api_key, counter, total)
+            for recipe_id, out_path, eval_path in tasks
+        ]
+        await asyncio.gather(*coros)
 
-        print(f"  [{i+1}/{len(output_files)}] {recipe_id}...", end=" ", flush=True)
-        try:
-            user_message = format_eval_message(original, result["parsed"])
-            response = call_eval_model(user_message, api_key)
-            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-            parsed = extract_json(content)
 
-            evaluation = {
-                "recipe_id": recipe_id,
-                "model": model_slug,
-                "eval_model": EVAL_MODEL,
-                "raw_response": content,
-                "parsed": parsed,
-                "usage": response.get("usage", {}),
-            }
-            with open(eval_path, "w", encoding="utf-8") as f:
-                json.dump(evaluation, f, indent=2)
-            if parsed:
-                print(f"completeness={parsed.get('completeness')} accuracy={parsed.get('accuracy')}")
-            else:
-                print("eval_parse_fail")
-        except Exception as e:
-            print(f"error: {e}")
+async def evaluate_all_async(
+    model_slugs: list[str],
+    ingested: dict[str, dict],
+    api_key: str,
+    limit: int | None = None,
+    concurrency: int = DEFAULT_CONCURRENCY,
+) -> None:
+    for slug in model_slugs:
+        await evaluate_model_async(slug, ingested, api_key, limit, concurrency)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python -m src.evaluate <recipes.jsonl> <model_slug1,model_slug2,...> [limit]")
+        print("Usage: python -m src.evaluate <recipes.jsonl> <model_slug1,model_slug2,...> [limit] [concurrency]")
         print("model_slug uses -- instead of / (e.g. google--gemma-3-4b-it)")
         sys.exit(1)
 
     jsonl_path = Path(sys.argv[1])
     model_slugs = sys.argv[2].split(",")
     limit = int(sys.argv[3]) if len(sys.argv) > 3 else None
+    concurrency = int(sys.argv[4]) if len(sys.argv) > 4 else DEFAULT_CONCURRENCY
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
@@ -190,5 +238,4 @@ if __name__ == "__main__":
         sys.exit(1)
 
     ingested = load_ingested(jsonl_path)
-    for slug in model_slugs:
-        evaluate_model(slug, ingested, api_key, limit)
+    asyncio.run(evaluate_all_async(model_slugs, ingested, api_key, limit, concurrency))

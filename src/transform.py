@@ -1,7 +1,9 @@
 """Send raw recipes to LLMs via OpenRouter and collect structured output."""
 
+import asyncio
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -16,6 +18,8 @@ load_dotenv()
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 PROMPTS_DIR = Path("prompts")
 OUTPUT_DIR = Path("data_nosync/outputs")
+
+DEFAULT_CONCURRENCY = 10
 
 
 def load_prompt(version: str = "v1") -> str:
@@ -41,39 +45,10 @@ def format_user_message(recipe: dict) -> str:
     return "\n\n".join(parts)
 
 
-def call_model(
-    model: str,
-    system_prompt: str,
-    user_message: str,
-    api_key: str,
-) -> dict:
-    """Call a model via OpenRouter. Returns the raw API response dict."""
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        "temperature": 0,
-    }
-    start = time.monotonic()
-    resp = httpx.post(OPENROUTER_URL, json=payload, headers=headers, timeout=60)
-    elapsed = time.monotonic() - start
-    resp.raise_for_status()
-    data = resp.json()
-    data["_elapsed_seconds"] = round(elapsed, 3)
-    return data
-
-
 def extract_json(text: str) -> dict | None:
     """Try to parse JSON from model output, handling markdown fences and preamble."""
     text = text.strip()
     # Extract from markdown code fences if present
-    import re
     fence_match = re.search(r'```(?:json)?\s*\n(.*?)\n\s*```', text, re.DOTALL)
     if fence_match:
         try:
@@ -93,7 +68,6 @@ def extract_json(text: str) -> dict | None:
         except json.JSONDecodeError:
             pass
     # Try finding the last complete JSON object (for CoT-style outputs)
-    # Find the last } and search backwards for matching {
     last_brace = text.rfind("}")
     if last_brace > 0:
         depth = 0
@@ -110,19 +84,20 @@ def extract_json(text: str) -> dict | None:
     return None
 
 
-def transform_one(
-    recipe: dict,
-    model: str,
-    system_prompt: str,
-    api_key: str,
-) -> dict:
-    """Transform a single recipe. Returns a result dict with parsed output and metadata."""
-    user_message = format_user_message(recipe)
-    response = call_model(model, system_prompt, user_message, api_key)
+def _build_payload(model: str, system_prompt: str, user_message: str) -> dict:
+    return {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        "temperature": 0,
+    }
 
+
+def _parse_response(response: dict, recipe: dict, model: str, elapsed: float) -> dict:
     content = response.get("choices", [{}])[0].get("message", {}).get("content") or ""
     usage = response.get("usage", {})
-    elapsed = response.get("_elapsed_seconds", 0)
 
     parsed = extract_json(content) if content else None
     validation_ok = False
@@ -137,7 +112,7 @@ def transform_one(
     return {
         "recipe_id": recipe["id"],
         "model": model,
-        "prompt_version": None,  # set by caller
+        "prompt_version": None,
         "raw_response": content,
         "parsed": parsed,
         "validation_ok": validation_ok,
@@ -147,11 +122,76 @@ def transform_one(
     }
 
 
-def transform_batch(
+# --- Sync API (kept for simple use) ---
+
+def call_model(model: str, system_prompt: str, user_message: str, api_key: str) -> dict:
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = _build_payload(model, system_prompt, user_message)
+    start = time.monotonic()
+    resp = httpx.post(OPENROUTER_URL, json=payload, headers=headers, timeout=60)
+    elapsed = time.monotonic() - start
+    resp.raise_for_status()
+    data = resp.json()
+    data["_elapsed_seconds"] = round(elapsed, 3)
+    return data
+
+
+def transform_one(recipe: dict, model: str, system_prompt: str, api_key: str) -> dict:
+    user_message = format_user_message(recipe)
+    response = call_model(model, system_prompt, user_message, api_key)
+    elapsed = response.get("_elapsed_seconds", 0)
+    return _parse_response(response, recipe, model, elapsed)
+
+
+# --- Async API ---
+
+async def _transform_recipe(
+    client: httpx.AsyncClient,
+    semaphore: asyncio.Semaphore,
+    recipe: dict,
+    model: str,
+    system_prompt: str,
+    api_key: str,
+    out_path: Path,
+    prompt_version: str,
+    counter: dict,
+    total: int,
+) -> None:
+    async with semaphore:
+        counter["started"] += 1
+        idx = counter["started"]
+        recipe_id = recipe["id"]
+        try:
+            payload = _build_payload(model, system_prompt, format_user_message(recipe))
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            start = time.monotonic()
+            resp = await client.post(OPENROUTER_URL, json=payload, headers=headers, timeout=60)
+            elapsed = round(time.monotonic() - start, 3)
+            resp.raise_for_status()
+            data = resp.json()
+
+            result = _parse_response(data, recipe, model, elapsed)
+            result["prompt_version"] = prompt_version
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+            status = "ok" if result["validation_ok"] else "parse_fail"
+            print(f"  [{idx}/{total}] {recipe_id} {status} ({elapsed:.1f}s)")
+        except Exception as e:
+            print(f"  [{idx}/{total}] {recipe_id} error: {e}")
+
+
+async def transform_batch_async(
     jsonl_path: Path,
     models: list[str],
     prompt_version: str = "v1",
     limit: int | None = None,
+    concurrency: int = DEFAULT_CONCURRENCY,
 ) -> None:
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
@@ -163,40 +203,61 @@ def transform_batch(
     if limit is not None:
         recipes = recipes[:limit]
 
-    for model in models:
-        model_slug = model.replace("/", "--")
-        if prompt_version != "v1":
-            model_slug = f"{model_slug}_{prompt_version}"
-        model_dir = OUTPUT_DIR / model_slug
-        model_dir.mkdir(parents=True, exist_ok=True)
+    semaphore = asyncio.Semaphore(concurrency)
 
-        print(f"\n=== {model} ({prompt_version}) ===")
-        for i, recipe in enumerate(recipes):
-            out_path = model_dir / f"{recipe['id']}.json"
-            if out_path.exists():
-                print(f"  [{i+1}/{len(recipes)}] {recipe['id']} (cached)")
+    async with httpx.AsyncClient() as client:
+        for model in models:
+            model_slug = model.replace("/", "--")
+            if prompt_version != "v1":
+                model_slug = f"{model_slug}_{prompt_version}"
+            model_dir = OUTPUT_DIR / model_slug
+            model_dir.mkdir(parents=True, exist_ok=True)
+
+            # Filter to uncached recipes
+            tasks = []
+            cached = 0
+            for recipe in recipes:
+                out_path = model_dir / f"{recipe['id']}.json"
+                if out_path.exists():
+                    cached += 1
+                    continue
+                tasks.append((recipe, out_path))
+
+            total = len(tasks)
+            print(f"\n=== {model} ({prompt_version}) | {total} to process, {cached} cached, concurrency={concurrency} ===")
+            if not tasks:
                 continue
 
-            print(f"  [{i+1}/{len(recipes)}] {recipe['id']}...", end=" ", flush=True)
-            try:
-                result = transform_one(recipe, model, system_prompt, api_key)
-                result["prompt_version"] = prompt_version
-                with open(out_path, "w", encoding="utf-8") as f:
-                    json.dump(result, f, indent=2)
-                status = "ok" if result["validation_ok"] else "parse_fail"
-                print(status)
-            except Exception as e:
-                print(f"error: {e}")
+            counter = {"started": 0}
+            coros = [
+                _transform_recipe(
+                    client, semaphore, recipe, model, system_prompt,
+                    api_key, out_path, prompt_version, counter, total,
+                )
+                for recipe, out_path in tasks
+            ]
+            await asyncio.gather(*coros)
+
+
+def transform_batch(
+    jsonl_path: Path,
+    models: list[str],
+    prompt_version: str = "v1",
+    limit: int | None = None,
+    concurrency: int = DEFAULT_CONCURRENCY,
+) -> None:
+    asyncio.run(transform_batch_async(jsonl_path, models, prompt_version, limit, concurrency))
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python -m src.transform <recipes.jsonl> <model1,model2,...> [prompt_version] [limit]")
-        print("Example: python -m src.transform data_nosync/ingested/recipenlg.jsonl google/gemma-3-4b-it,mistralai/mistral-small v1 10")
+        print("Usage: python -m src.transform <recipes.jsonl> <model1,model2,...> [prompt_version] [limit] [concurrency]")
+        print("Example: python -m src.transform data_nosync/ingested/recipenlg.jsonl google/gemma-3-4b-it v1 10 20")
         sys.exit(1)
 
     jsonl_path = Path(sys.argv[1])
     models = sys.argv[2].split(",")
     prompt_version = sys.argv[3] if len(sys.argv) > 3 else "v1"
     limit = int(sys.argv[4]) if len(sys.argv) > 4 else None
-    transform_batch(jsonl_path, models, prompt_version, limit)
+    concurrency = int(sys.argv[5]) if len(sys.argv) > 5 else DEFAULT_CONCURRENCY
+    transform_batch(jsonl_path, models, prompt_version, limit, concurrency)
