@@ -59,3 +59,7 @@ Draft tweets for a thread. 280 char limit per tweet.
 - Every cuisine has a "dessert axis" — it's universal. But the axes after that are unique. Chinese food's EV2 is dumpling-making vs wok cooking. French EV2 is Provençal vs pâtisserie. Mexican EV2 is mole vs Tex-Mex. The first split is shared; after that, each cuisine has its own geometry.
 
 - French eigenvector 5 literally rediscovered cassoulet: white beans + confit duck legs + garlic-pork sausage. One dish, so structurally distinctive it gets its own dimension.
+
+- Built 200-dimensional cooking embeddings. Asked "which recipes are structurally French but not tagged French?" Top answer: osso buco. An Italian dish that is, structurally, French — braise + wine + aromatics + long cook. The embedding knows that technique is more fundamental than nationality.
+
+- The embeddings found that Pad Thai is tagged "asian" not "thai", chicken fricassée is tagged "american", and a recipe literally called "thoren" (an Indian coconut stir-fry) is tagged "american." The math catches what the metadata missed.
