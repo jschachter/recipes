@@ -24,6 +24,7 @@
 - Recipe classification -- category (dessert, side, main, etc.), cuisine, difficulty
 - Filter out "trivial" recipes (dump-and-stir, 3-ingredient, etc.) to focus on interesting ones
 - Unit normalization (imperial vs metric, "a pinch" etc) -- identified hard problem
+- Quantity/ratio analysis: detect structural ratios (cookie = 1:2:1 butter:flour:sugar), anomalous quantities, substitution scaling. Requires unit normalization first.
 - Compare LLM extraction against RecipeNLG's SpaCy NER model as baseline
 - Control token / special token encoding of recipe structure (RecipeNLG approach)
 - Filter RecipeNLG on source=Gathered for higher quality ~1.6M subset
