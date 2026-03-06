@@ -26,12 +26,29 @@ Score the extraction on two dimensions (0.0 to 1.0):
 - **completeness**: Does the structured output capture all information from the original? Missing ingredients, steps, times, or temperatures lower this score.
 - **accuracy**: Is the structured information correct? Wrong quantities, misattributed ingredients, invented information, or mis-parsed fields lower this score.
 
-Also list specific errors you find, and provide brief commentary on the overall quality.
+IMPORTANT: Only flag actual errors that affect meaning or usability. Do NOT flag:
+- Trivial singular/plural differences ("onion" vs "onions")
+- Minor rewording that preserves meaning ("mix together" vs "combine")
+- Correcting obvious typos in the original ("candid" → "candied")
+- Reasonable abbreviation or expansion of ingredient names
+- Adding standard units or clarifications that don't change meaning
+
+DO flag:
+- Missing ingredients or steps
+- Wrong quantities, units, or temperatures
+- Ingredients attributed to the wrong step
+- Invented information not in the original
+- Steps that materially change the cooking process
+- Listing all ingredients in a step when only some are actually used
+
+Classify each error by severity:
+- "major": changes the recipe outcome (wrong quantity, missing step, wrong temperature)
+- "minor": cosmetic or structural issue that doesn't affect cooking
 
 Output a JSON object with these fields:
 - "completeness": float 0.0-1.0
 - "accuracy": float 0.0-1.0
-- "errors": array of strings (specific issues found, empty if none)
+- "errors": array of objects, each with "description" (string) and "severity" ("major" or "minor")
 - "commentary": string (brief overall assessment)
 
 Output only valid JSON, no markdown or commentary outside the JSON.
