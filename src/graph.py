@@ -20,7 +20,9 @@ SYNONYMS = {
 }
 
 
-def normalize(name: str) -> str:
+def normalize(name) -> str:
+    if not isinstance(name, str):
+        name = str(name)
     name = name.lower().strip()
     if name.endswith("s") and not name.endswith("ss") and len(name) > 3:
         singular = name[:-1]
@@ -29,8 +31,12 @@ def normalize(name: str) -> str:
     return SYNONYMS.get(name, name)
 
 
-def build_graph(model_slug: str) -> tuple[list[str], sparse.csr_matrix, int]:
+def build_graph(model_slug: str, filters: list[str] | None = None) -> tuple[list[str], sparse.csr_matrix, int]:
     """Build a sparse co-occurrence graph from parsed recipe outputs.
+
+    Args:
+        filters: if provided, only include recipes containing ALL of these features
+                 (e.g. ["tag:dessert", "ingredient:butter"])
 
     Returns (node_list, adjacency_matrix, recipe_count).
     """
@@ -49,6 +55,23 @@ def build_graph(model_slug: str) -> tuple[list[str], sparse.csr_matrix, int]:
         tags = [f'tag:{t.lower().strip()}' for t in (parsed.get("tags") or [])]
         steps = parsed.get("steps") or []
         n_steps = max(len(steps), 1)
+
+        # Filter check: quick scan of all features in this recipe
+        if filters:
+            all_feats = set(tags)
+            for step in steps:
+                if step.get("action"):
+                    all_feats.add(f"action:{normalize(step['action'])}")
+                for ing in step.get("ingredients") or []:
+                    if ing:
+                        all_feats.add(f"ingredient:{normalize(ing)}")
+                for tool in step.get("tools") or []:
+                    if tool:
+                        all_feats.add(f"tool:{normalize(tool)}")
+                if step.get("temperature"):
+                    all_feats.add(f"temp:{step['temperature'].lower().strip()}")
+            if not all(f in all_feats for f in filters):
+                continue
 
         all_recipe_features: set[str] = set()
         prev_step_features: list[str] = []
@@ -183,18 +206,30 @@ def spectral_analysis(nodes: list[str], A: sparse.csr_matrix, k: int = 10) -> No
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python -m src.graph <model_slug> [num_eigenvectors] [--pmi]")
+        print("Usage: python -m src.graph <model_slug> [num_eigenvectors] [--pmi] [--filter feat1,feat2,...]")
         print("Example: python -m src.graph google--gemini-2.5-flash-lite_v11-tagged 10 --pmi")
+        print("Example: python -m src.graph google--gemini-2.5-flash-lite_v11-tagged 6 --pmi --filter tag:dessert")
         sys.exit(1)
 
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     flags = [a for a in sys.argv[1:] if a.startswith("--")]
     use_pmi = "--pmi" in flags
 
+    filters = None
+    for flag in flags:
+        if flag.startswith("--filter="):
+            filters = flag.split("=", 1)[1].split(",")
+        elif flag == "--filter":
+            idx = sys.argv.index("--filter")
+            if idx + 1 < len(sys.argv):
+                filters = sys.argv[idx + 1].split(",")
+
     model_slug = args[0]
     k = int(args[1]) if len(args) > 1 else 10
 
-    nodes, A, recipe_count = build_graph(model_slug)
+    if filters:
+        print(f"Filtering to recipes containing: {filters}")
+    nodes, A, recipe_count = build_graph(model_slug, filters=filters)
     print(f"Recipes: {recipe_count}, Nodes: {len(nodes)}, Edges: {A.nnz // 2}")
 
     if use_pmi:
