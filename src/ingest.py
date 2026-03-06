@@ -56,9 +56,30 @@ def load_epicurious(path: Path) -> list[dict]:
     return recipes
 
 
+def load_epicurious_json(path: Path) -> list[dict]:
+    """Load Epicurious full_format_recipes.json."""
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    recipes = []
+    for i, r in enumerate(data):
+        ingredients = r.get("ingredients") or []
+        directions = r.get("directions") or []
+        recipes.append({
+            "id": f"epicurious_{i}",
+            "title": (r.get("title") or "").strip(),
+            "ingredients_raw": "\n".join(ingredients),
+            "directions_raw": "\n".join(directions),
+            "source": "epicurious",
+            "url": "",
+            "dataset": "epicurious",
+        })
+    return recipes
+
+
 LOADERS = {
     "recipenlg": load_recipenlg,
     "epicurious": load_epicurious,
+    "epicurious_json": load_epicurious_json,
 }
 
 
