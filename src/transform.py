@@ -70,17 +70,25 @@ def call_model(
 
 
 def extract_json(text: str) -> dict | None:
-    """Try to parse JSON from model output, handling markdown fences."""
+    """Try to parse JSON from model output, handling markdown fences and preamble."""
     text = text.strip()
     if text.startswith("```"):
-        # strip markdown code fences
         lines = text.split("\n")
         lines = [l for l in lines if not l.strip().startswith("```")]
         text = "\n".join(lines)
+    # Try as-is first
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        return None
+        pass
+    # Strip any preamble before the first {
+    idx = text.find("{")
+    if idx > 0:
+        try:
+            return json.loads(text[idx:])
+        except json.JSONDecodeError:
+            pass
+    return None
 
 
 def transform_one(
