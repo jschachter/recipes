@@ -68,7 +68,36 @@ def render_ingredients(ingredients: list[dict]) -> str:
     </table>"""
 
 
-def render_steps(steps: list[dict]) -> str:
+def _classify_errors(errors: list) -> tuple[dict[int, list], list, list]:
+    """Classify errors into step-specific, ingredient-related, and general.
+    Returns (step_errors_dict, ingredient_errors, general_errors)."""
+    import re
+    step_errors: dict[int, list] = {}
+    ingredient_errors = []
+    general = []
+    for e in errors:
+        text = e.get("description", str(e)) if isinstance(e, dict) else str(e)
+        m = re.search(r'\bStep\s+(\d+)\b', text, re.IGNORECASE)
+        if m:
+            idx = int(m.group(1))
+            step_errors.setdefault(idx, []).append(e)
+        elif re.search(r'\b(ingredient|quantity|unit)\b', text, re.IGNORECASE):
+            ingredient_errors.append(e)
+        else:
+            general.append(e)
+    return step_errors, ingredient_errors, general
+
+
+def _render_error_item(e) -> str:
+    if isinstance(e, dict):
+        sev = e.get("severity", "")
+        desc = e.get("description", str(e))
+        sev_tag = f' <span class="severity-{sev}">[{sev}]</span>' if sev else ""
+        return f"<li>{escape(desc)}{sev_tag}</li>"
+    return f"<li>{escape(str(e))}</li>"
+
+
+def render_steps(steps: list[dict], step_errors: dict[int, list] | None = None) -> str:
     if not steps:
         return "<em>none</em>"
     parts = []
@@ -93,11 +122,17 @@ def render_steps(steps: list[dict]) -> str:
             meta_parts.append(f"<strong>temp:</strong> {temp}")
         meta = " | ".join(meta_parts)
 
-        parts.append(f"""<div class="step">
+        errors_html = ""
+        if step_errors and isinstance(idx, int) and idx in step_errors:
+            items = "".join(_render_error_item(e) for e in step_errors[idx])
+            errors_html = f'<div class="step-errors"><ul>{items}</ul></div>'
+
+        parts.append(f"""<div class="step{' step-has-error' if errors_html else ''}">
             <div class="step-header">Step {idx}: <strong>{action}</strong></div>
             <div class="step-desc">{desc}</div>
             {f'<div class="step-meta">{meta}</div>' if meta else ''}
             <div class="step-raw">Raw: {raw}</div>
+            {errors_html}
         </div>""")
     return "".join(parts)
 
@@ -114,6 +149,8 @@ def render_model_section(model_slug: str, output: dict, evaluation: dict | None)
     eval_parsed = evaluation.get("parsed") if evaluation else None
 
     scores_html = ""
+    step_errors_map = {}
+    ingredient_errors = []
     if eval_parsed:
         scores_html = f"""<div class="scores">
             <div class="score">Completeness {score_bar(eval_parsed.get('completeness'))}</div>
@@ -122,9 +159,12 @@ def render_model_section(model_slug: str, output: dict, evaluation: dict | None)
         errors = eval_parsed.get("errors", [])
         commentary = eval_parsed.get("commentary", "")
         if errors:
-            scores_html += '<div class="errors"><strong>Errors:</strong><ul>'
-            scores_html += "".join(f"<li>{escape(e)}</li>" for e in errors)
-            scores_html += "</ul></div>"
+            steps = parsed.get("steps", [])
+            step_errors_map, ingredient_errors, general = _classify_errors(errors)
+            if general:
+                scores_html += '<div class="errors"><strong>General errors:</strong><ul>'
+                scores_html += "".join(_render_error_item(e) for e in general)
+                scores_html += "</ul></div>"
         if commentary:
             scores_html += f'<div class="commentary"><strong>Commentary:</strong> {escape(commentary)}</div>'
 
@@ -143,8 +183,9 @@ def render_model_section(model_slug: str, output: dict, evaluation: dict | None)
         {scores_html}
         <h4>Ingredients</h4>
         {render_ingredients(parsed.get('ingredients', []))}
+        {'<div class="errors"><ul>' + "".join(_render_error_item(e) for e in ingredient_errors) + "</ul></div>" if eval_parsed and ingredient_errors else ""}
         <h4>Steps</h4>
-        {render_steps(parsed.get('steps', []))}
+        {render_steps(parsed.get('steps', []), step_errors_map)}
     </div>"""
 
 
@@ -174,7 +215,13 @@ td.raw { color: #888; font-size: 0.85em; }
 .step-desc { margin: 5px 0; }
 .step-meta { font-size: 0.9em; color: #555; }
 .step-raw { font-size: 0.85em; color: #888; margin-top: 5px; }
+.step-errors { margin-top: 5px; }
+.step-errors ul { margin: 2px 0; padding-left: 20px; }
+.step-errors li { color: #c62828; font-size: 0.9em; }
+.step-has-error { border-left: 3px solid #f44336; }
 .error { color: #c62828; }
+.severity-major { color: #c62828; font-weight: bold; font-size: 0.85em; }
+.severity-minor { color: #ff9800; font-size: 0.85em; }
 a { color: #1976d2; }
 .nav { margin: 20px 0; }
 .nav a { margin-right: 10px; }
@@ -258,10 +305,7 @@ def summarize_models(models: list[str]) -> list[dict]:
         avg_elapsed = sum(elapsed_times) / len(elapsed_times) if elapsed_times else None
         valid_rate = valid_outputs / total_outputs if total_outputs else 0
 
-        # Combined score: 70% quality + 15% reliability + 15% speed
-        quality = ((avg_compl or 0) + (avg_accur or 0)) / 2
-        speed = max(0, 1 - (avg_elapsed or 999) / 60)
-        combined = quality * 0.70 + valid_rate * 0.15 + speed * 0.15
+        cost_per = total_cost / total_outputs if total_outputs else 0
 
         summaries.append({
             "model": model_slug,
@@ -270,9 +314,27 @@ def summarize_models(models: list[str]) -> list[dict]:
             "avg_accuracy": avg_accur,
             "avg_elapsed": avg_elapsed,
             "total_cost": total_cost,
+            "cost_per": cost_per,
             "valid_rate": valid_rate,
-            "combined": combined,
         })
+
+    # Compute combined score with cost normalized across all models (log scale)
+    import math
+    costs = [s["cost_per"] for s in summaries if s["cost_per"] > 0]
+    if costs:
+        log_min = math.log(min(costs))
+        log_max = math.log(max(costs))
+        log_range = log_max - log_min if log_max > log_min else 1
+    for s in summaries:
+        quality = ((s["avg_completeness"] or 0) + (s["avg_accuracy"] or 0)) / 2
+        speed = max(0, 1 - (s["avg_elapsed"] or 999) / 60)
+        if s["cost_per"] > 0 and costs:
+            cost_score = 1 - (math.log(s["cost_per"]) - log_min) / log_range
+        else:
+            cost_score = 0.5
+        # 60% quality + 10% reliability + 10% speed + 20% cost
+        s["combined"] = quality * 0.60 + s["valid_rate"] * 0.10 + speed * 0.10 + cost_score * 0.20
+
     return sorted(summaries, key=lambda s: s.get("combined") or 0, reverse=True)
 
 
@@ -282,7 +344,7 @@ def render_model_summary(summaries: list[dict]) -> str:
     rows = []
     for s in summaries:
         elapsed = f"{s['avg_elapsed']:.1f}s" if s.get("avg_elapsed") is not None else "n/a"
-        cost = f"${s['total_cost']:.4f}" if s.get("total_cost") else "n/a"
+        cost_per = f"${s['cost_per']:.5f}" if s.get("cost_per") else "n/a"
         valid = f"{s['valid_rate']:.0%}" if s.get("valid_rate") is not None else "n/a"
         rows.append(f"""<tr>
             <td><strong>{escape(s['model'])}</strong></td>
@@ -291,13 +353,13 @@ def render_model_summary(summaries: list[dict]) -> str:
             <td>{score_bar(s['avg_accuracy'])}</td>
             <td>{valid}</td>
             <td>{elapsed}</td>
-            <td>{cost}</td>
+            <td>{cost_per}</td>
         </tr>""")
     return f"""<div class="model-section">
         <h2>Model Scores</h2>
-        <p style="color:#666;font-size:0.9em">Combined = 70% quality (completeness + accuracy) + 15% reliability + 15% speed</p>
+        <p style="color:#666;font-size:0.9em">Combined = 60% quality + 10% reliability + 10% speed + 20% cost (log-scaled)</p>
         <table class="ingredients">
-            <tr><th>Model</th><th>Combined</th><th>Completeness</th><th>Accuracy</th><th>Valid</th><th>Avg Time</th><th>Total Cost</th></tr>
+            <tr><th>Model</th><th>Combined</th><th>Completeness</th><th>Accuracy</th><th>Valid</th><th>Avg Time</th><th>$/recipe</th></tr>
             {''.join(rows)}
         </table>
     </div>"""
