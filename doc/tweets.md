@@ -35,3 +35,13 @@ Draft tweets for a thread. 280 char limit per tweet.
 - Filtered to salads and computed eigenvectors. EV2 immediately exiled Jello salads to a different dimension. The math agrees: that's not a salad.
 
 - "Swap rosemary for braising" is the same kind of operation as "swap rosemary for thyme." In cooking eigenvector space, techniques and ingredients are the same kind of thing.
+
+- Dimension 7 of 45,000 recipes: one end is pickled/vegan/condiment/side. The other is Chinese/pasta/Italian/French. "Pantry preservation vs global cuisine." Nobody would name that axis, but the math says it's the 7th most important way recipes differ.
+
+- Dimension 8 separates cocktails from canning. Both use fruit and acid. But the eigenvector knows: one end is party/beverage/frozen, the other is preserves/pickled/condiment. Two completely different relationships with vinegar.
+
+- I tried to find the "casserole dimension" and couldn't. Casseroles don't have their own eigenvector because they're structural hybrids: they use cold-assembly techniques (layer, spread, top) but then bake. They sit at the intersection of two dimensions. The math says a casserole is a seven-layer dip that got hot.
+
+- What's the opposite of a salad? Depends which dimension you ask. On dim 4 it's stovetop simmering. On dim 18 it's oven baking. On dim 6 it's sealed-vessel cooking. A salad is simultaneously the opposite of three different things. It lives in the corner where nothing gets heated and no one uses flour.
+
+- A salad is the absence of heat, chemistry, and flour. It occupies a corner of cooking eigenvector space that is maximally distant from simmering, baking, AND slow-cooking — all at once. Nothing else in cooking is the opposite of so many things simultaneously.
