@@ -6,7 +6,7 @@ from collections import Counter
 from itertools import combinations
 from pathlib import Path
 
-from src.graph import normalize, OUTPUT_DIR
+from src.graph import normalize, OUTPUT_DIR, _load_keep_list
 
 
 BORING = frozenset({
@@ -21,9 +21,12 @@ DEFAULT_MODEL = "google--gemini-2.5-flash-lite_v11-tagged"
 def load_recipes(model_slug: str) -> list[dict]:
     """Load all parsed recipes with their normalized ingredients and tags."""
     model_dir = OUTPUT_DIR / model_slug
+    keep_list = _load_keep_list(model_dir)
     recipes = []
 
     for f in sorted(model_dir.glob("*.json")):
+        if keep_list is not None and f.stem not in keep_list:
+            continue
         d = json.load(open(f))
         parsed = d.get("parsed")
         if not parsed:

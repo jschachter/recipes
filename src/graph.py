@@ -50,6 +50,14 @@ def normalize(name) -> str:
     return SYNONYMS.get(name, name)
 
 
+def _load_keep_list(model_dir: Path) -> set[str] | None:
+    """Load the dedup keep list if it exists."""
+    keep_path = model_dir / "_keep_list.json"
+    if keep_path.exists():
+        return set(json.loads(keep_path.read_text()))
+    return None
+
+
 def build_graph(model_slug: str, filters: list[str] | None = None) -> tuple[list[str], sparse.csr_matrix, int]:
     """Build a sparse co-occurrence graph from parsed recipe outputs.
 
@@ -60,11 +68,17 @@ def build_graph(model_slug: str, filters: list[str] | None = None) -> tuple[list
     Returns (node_list, adjacency_matrix, recipe_count).
     """
     model_dir = OUTPUT_DIR / model_slug
+    keep_list = _load_keep_list(model_dir)
+    if keep_list is not None:
+        print(f"Using dedup keep list: {len(keep_list)} recipes")
+
     edges: dict[tuple[str, str], float] = defaultdict(float)
     node_set: set[str] = set()
     recipe_count = 0
 
     for f in sorted(model_dir.glob("*.json")):
+        if keep_list is not None and f.stem not in keep_list:
+            continue
         d = json.load(open(f))
         parsed = d.get("parsed")
         if not parsed:
