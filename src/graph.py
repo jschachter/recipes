@@ -50,6 +50,9 @@ def build_graph(model_slug: str) -> tuple[list[str], sparse.csr_matrix, int]:
         steps = parsed.get("steps") or []
         n_steps = max(len(steps), 1)
 
+        all_recipe_features: set[str] = set()
+        prev_step_features: list[str] = []
+
         for step in steps:
             step_features = []
             action = step.get("action")
@@ -67,18 +70,36 @@ def build_graph(model_slug: str) -> tuple[list[str], sparse.csr_matrix, int]:
 
             node_set.update(step_features)
             node_set.update(tags)
+            all_recipe_features.update(step_features)
 
-            # Full weight: step feature <-> step feature
+            # Full weight: step feature <-> step feature (within same step)
             for i in range(len(step_features)):
                 for j in range(i + 1, len(step_features)):
                     edge = tuple(sorted([step_features[i], step_features[j]]))
                     edges[edge] += 1
+
+            # Sequential edges: consecutive steps share context (half weight)
+            for prev_feat in prev_step_features:
+                for feat in step_features:
+                    if prev_feat != feat:
+                        edge = tuple(sorted([prev_feat, feat]))
+                        edges[edge] += 0.5
+
+            prev_step_features = step_features
 
             # Downweighted: tag <-> step feature (1/n_steps per step)
             for tag in tags:
                 for feat in step_features:
                     edge = tuple(sorted([tag, feat]))
                     edges[edge] += 1.0 / n_steps
+
+        # Recipe-level edges: all features in the same recipe (weak)
+        recipe_features = sorted(all_recipe_features)
+        recipe_weight = 1.0 / max(len(recipe_features), 1)
+        for i in range(len(recipe_features)):
+            for j in range(i + 1, len(recipe_features)):
+                edge = tuple(sorted([recipe_features[i], recipe_features[j]]))
+                edges[edge] += recipe_weight
 
         # Tag <-> tag: once per recipe
         for i in range(len(tags)):

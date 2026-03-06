@@ -38,7 +38,9 @@ Core idea: build a co-occurrence graph where every feature in a step (action, in
 - Key insight: ingredients, actions, tools, and temperatures all live in the same feature space. "Remove rosemary, add braising" is the same kind of operation as "remove rosemary, add thyme."
 - Substitutability = features that occupy similar positions in the eigenvector space (close in multiple dimensions).
 - Normalization question: loose for now (lowercase, strip quantities). Tight canonicalization later if needed.
-- Next step: run 10K recipes through Flash Lite + v5-strict, build graph, see what eigenvectors reveal at scale.
+- Three edge types: within-step (weight 1), sequential/consecutive steps (weight 0.5), recipe-level (weight 1/n_features). Fixes the problem of flour never connecting to oven.
+- Unnamed intermediates: baking has "dough" but most modalities lack symbolic names for intermediate results (e.g., "fond + wine reduction" in braising). The spectral approach handles this implicitly — if steps 1-3 always co-occur in a pattern, those features cluster in eigenvector space. Explicitly discovering these composites = motif detection in the graph.
+- Next step: run 10K recipes through Flash Lite + v11-tagged, build graph, see what eigenvectors reveal at scale.
 
 Analogy: like blog connectivity graphs where eigenvectors revealed tech↔media axes and team-identity axes (Yankees-ness vs Red Sox-ness). In cooking, the equivalent might be cuisines, technique families, or unnamed structural concepts.
 
