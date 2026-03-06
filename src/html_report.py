@@ -55,6 +55,9 @@ def render_ingredients(ingredients: list[dict]) -> str:
         return "<em>none</em>"
     rows = []
     for ing in ingredients:
+        if isinstance(ing, str):
+            rows.append(f'<tr><td colspan="5">{escape(ing)}</td></tr>')
+            continue
         rows.append(f"""<tr>
             <td>{escape(str(ing.get('quantity', '') or ''))}</td>
             <td>{escape(str(ing.get('unit', '') or ''))}</td>

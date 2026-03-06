@@ -1,0 +1,48 @@
+Parse the following recipe into structured JSON matching this JSON Schema:
+
+{
+  "type": "object",
+  "required": ["title", "ingredients", "steps"],
+  "properties": {
+    "title": {"type": "string"},
+    "servings": {"type": ["string", "null"]},
+    "total_time": {"type": ["string", "null"]},
+    "ingredients": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "raw_text"],
+        "properties": {
+          "name": {"type": "string", "description": "The ingredient name"},
+          "quantity": {"type": ["string", "null"], "description": "e.g. '2', '1/2'"},
+          "unit": {"type": ["string", "null"], "description": "e.g. 'cups', 'tbsp'"},
+          "preparation": {"type": ["string", "null"], "description": "e.g. 'diced', 'melted'"},
+          "notes": {"type": ["string", "null"]},
+          "raw_text": {"type": "string", "description": "Original ingredient text verbatim"}
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["index", "raw_text"],
+        "properties": {
+          "index": {"type": "integer", "description": "1-based step number"},
+          "action": {"type": ["string", "null"], "description": "Primary verb: saute, mix, bake, etc."},
+          "ingredients": {"type": "array", "items": {"type": "string"}, "description": "Ingredient names used in this step"},
+          "tools": {"type": "array", "items": {"type": "string"}, "description": "Equipment: skillet, oven, etc."},
+          "duration": {"type": ["string", "null"], "description": "e.g. '5 minutes'"},
+          "temperature": {"type": ["string", "null"], "description": "e.g. '350F', 'medium-high'"},
+          "description": {"type": "string", "description": "Clear restatement of the step"},
+          "raw_text": {"type": "string", "description": "Original step text verbatim"}
+        }
+      }
+    }
+  }
+}
+
+Rules:
+- Use null for fields you cannot determine from the text
+- Do not invent information not in the original
+- Output only valid JSON, no markdown or commentary

@@ -1,0 +1,23 @@
+You are a recipe parser. Given a recipe's title, ingredients, and directions, produce a structured JSON representation.
+
+Here is an example:
+
+Input:
+Title: Simple Pancakes
+Ingredients:
+1 cup all-purpose flour
+1 egg, beaten
+3/4 cup milk
+2 tablespoons melted butter
+Directions:
+Mix flour, egg, milk, and butter until smooth. Heat a griddle over medium heat. Pour 1/4 cup batter per pancake. Cook 2 minutes per side until golden.
+
+Output:
+{"title":"Simple Pancakes","servings":null,"total_time":null,"ingredients":[{"name":"all-purpose flour","quantity":"1","unit":"cup","preparation":null,"notes":null,"raw_text":"1 cup all-purpose flour"},{"name":"egg","quantity":"1","unit":null,"preparation":"beaten","notes":null,"raw_text":"1 egg, beaten"},{"name":"milk","quantity":"3/4","unit":"cup","preparation":null,"notes":null,"raw_text":"3/4 cup milk"},{"name":"butter","quantity":"2","unit":"tablespoons","preparation":"melted","notes":null,"raw_text":"2 tablespoons melted butter"}],"steps":[{"index":1,"action":"mix","ingredients":["all-purpose flour","egg","milk","butter"],"tools":[],"duration":null,"temperature":null,"description":"Mix flour, egg, milk, and butter until smooth","raw_text":"Mix flour, egg, milk, and butter until smooth."},{"index":2,"action":"heat","ingredients":[],"tools":["griddle"],"duration":null,"temperature":"medium heat","description":"Heat a griddle over medium heat","raw_text":"Heat a griddle over medium heat."},{"index":3,"action":"pour","ingredients":["batter"],"tools":[],"duration":null,"temperature":null,"description":"Pour 1/4 cup batter per pancake","raw_text":"Pour 1/4 cup batter per pancake."},{"index":4,"action":"cook","ingredients":[],"tools":[],"duration":"2 minutes per side","temperature":null,"description":"Cook until golden, about 2 minutes per side","raw_text":"Cook 2 minutes per side until golden."}]}
+
+Now parse the following recipe in the same format. Output only valid JSON, no markdown or commentary.
+
+Rules:
+- Always include raw_text so the original can be recovered
+- If you cannot parse a field, set it to null rather than guessing
+- Do not invent information not present in the original recipe

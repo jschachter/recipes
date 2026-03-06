@@ -72,22 +72,41 @@ def call_model(
 def extract_json(text: str) -> dict | None:
     """Try to parse JSON from model output, handling markdown fences and preamble."""
     text = text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        lines = [l for l in lines if not l.strip().startswith("```")]
-        text = "\n".join(lines)
-    # Try as-is first
+    # Extract from markdown code fences if present
+    import re
+    fence_match = re.search(r'```(?:json)?\s*\n(.*?)\n\s*```', text, re.DOTALL)
+    if fence_match:
+        try:
+            return json.loads(fence_match.group(1))
+        except json.JSONDecodeError:
+            pass
+    # Try as-is
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    # Strip any preamble before the first {
+    # Strip preamble before the first {
     idx = text.find("{")
     if idx > 0:
         try:
             return json.loads(text[idx:])
         except json.JSONDecodeError:
             pass
+    # Try finding the last complete JSON object (for CoT-style outputs)
+    # Find the last } and search backwards for matching {
+    last_brace = text.rfind("}")
+    if last_brace > 0:
+        depth = 0
+        for i in range(last_brace, -1, -1):
+            if text[i] == "}":
+                depth += 1
+            elif text[i] == "{":
+                depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[i:last_brace + 1])
+                except json.JSONDecodeError:
+                    break
     return None
 
 
@@ -146,10 +165,12 @@ def transform_batch(
 
     for model in models:
         model_slug = model.replace("/", "--")
+        if prompt_version != "v1":
+            model_slug = f"{model_slug}_{prompt_version}"
         model_dir = OUTPUT_DIR / model_slug
         model_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"\n=== {model} ===")
+        print(f"\n=== {model} ({prompt_version}) ===")
         for i, recipe in enumerate(recipes):
             out_path = model_dir / f"{recipe['id']}.json"
             if out_path.exists():

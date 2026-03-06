@@ -1,0 +1,3 @@
+Extract this recipe to JSON. Schema:
+{title, servings?, total_time?, ingredients: [{name, quantity?, unit?, preparation?, notes?, raw_text}], steps: [{index, action?, ingredients: [str], tools: [str], duration?, temperature?, description, raw_text}]}
+Use null for missing fields. Keep raw_text verbatim. Only JSON output.

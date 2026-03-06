@@ -1,0 +1,1 @@
+Parse this recipe into JSON with fields: title, servings, total_time, ingredients (array of {name, quantity, unit, preparation, notes, raw_text}), steps (array of {index, action, ingredients, tools, duration, temperature, description, raw_text}). Use null for unknown fields. Output only JSON.

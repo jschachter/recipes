@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class Ingredient(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", coerce_numbers_to_str=True)
 
     name: str
     quantity: str | None = None
@@ -28,7 +28,7 @@ class Step(BaseModel):
 
 
 class Recipe(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", coerce_numbers_to_str=True)
 
     title: str | None = None
     source: str | None = None
