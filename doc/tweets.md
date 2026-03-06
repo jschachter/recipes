@@ -45,3 +45,11 @@ Draft tweets for a thread. 280 char limit per tweet.
 - What's the opposite of a salad? Depends which dimension you ask. On dim 4 it's stovetop simmering. On dim 18 it's oven baking. On dim 6 it's sealed-vessel cooking. A salad is simultaneously the opposite of three different things. It lives in the corner where nothing gets heated and no one uses flour.
 
 - A salad is the absence of heat, chemistry, and flour. It occupies a corner of cooking eigenvector space that is maximally distant from simmering, baking, AND slow-cooking — all at once. Nothing else in cooking is the opposite of so many things simultaneously.
+
+- Fed 67K recipes through triplet detection. The universal holy trinity: carrot + celery + onion (678 recipes). The Korean trinity: green onion + sesame oil + sesame seed. The German trinity: apple + bay leaf + cabbage. The data rediscovered mirepoix and rotkohl without being told they exist.
+
+- The data says the "Mexican holy trinity" is cheddar cheese + sour cream + tomato. This tells you more about the dataset (American recipe blogs) than about Mexican cooking. Corpus bias is a feature, not a bug — it reveals what a culture *thinks* another culture's food is.
+
+- Ran 120K recipes through triplet detection across cuisines. The data independently rediscovered: mirepoix (carrot+celery+onion), the Indian curry base (coriander+cumin+turmeric), the Thai trinity (fish sauce+lime juice+shallot), and spanakopita (feta+phyllo+spinach). Nobody told it these existed.
+
+- The Japanese cooking trinity according to 120K recipes: mirin + scallion + soy sauce. The Thai: coconut milk + fish sauce + lime juice. The Korean: green onion + sesame oil + sesame seed. Each cuisine's structural DNA, discovered from co-occurrence alone.
