@@ -13,6 +13,8 @@
 - Ingredient substitution networks -- which ingredients are interchangeable
 - Cooking technique taxonomy derived from data
 - Recipe complexity scoring
+- Recipe classification -- category (dessert, side, main, etc.), cuisine, difficulty
+- Filter out "trivial" recipes (dump-and-stir, 3-ingredient, etc.) to focus on interesting ones
 - Unit normalization (imperial vs metric, "a pinch" etc) -- identified hard problem
 - Compare LLM extraction against RecipeNLG's SpaCy NER model as baseline
 - Control token / special token encoding of recipe structure (RecipeNLG approach)
